@@ -59,7 +59,9 @@ fn parse_display_hint(s: &str) -> Result<DisplayHint, String> {
         "X" => DisplayHint::UpperHex,
         "ipv4" => DisplayHint::Ipv4,
         "ipv6" => DisplayHint::Ipv6,
-        _ => return Err(format!("unknown display hint: {:?}", s)),
+        "mac" => DisplayHint::LowerMac,
+        "MAC" => DisplayHint::UpperMac,
+        _ => return Err(format!("unknown display hint: {s:?}")),
     })
 }
 
@@ -81,7 +83,7 @@ fn parse_param(mut input: &str) -> Result<Parameter, String> {
 
         hint = parse_display_hint(input)?;
     } else if !input.is_empty() {
-        return Err(format!("unexpected content {:?} in format string", input));
+        return Err(format!("unexpected content {input:?} in format string"));
     }
 
     Ok(Parameter { hint })

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     convert::{AsMut, AsRef},
     marker::PhantomData,
 };
@@ -78,8 +79,13 @@ impl<T: AsRef<MapData>, K: Pod, V: Pod> HashMap<T, K, V> {
 
 impl<T: AsMut<MapData>, K: Pod, V: Pod> HashMap<T, K, V> {
     /// Inserts a key-value pair into the map.
-    pub fn insert(&mut self, key: K, value: V, flags: u64) -> Result<(), MapError> {
-        hash_map::insert(self.inner.as_mut(), key, value, flags)
+    pub fn insert(
+        &mut self,
+        key: impl Borrow<K>,
+        value: impl Borrow<V>,
+        flags: u64,
+    ) -> Result<(), MapError> {
+        hash_map::insert(self.inner.as_mut(), key.borrow(), value.borrow(), flags)
     }
 
     /// Removes a key from the map.
@@ -111,14 +117,17 @@ mod tests {
             bpf_map_type::{BPF_MAP_TYPE_HASH, BPF_MAP_TYPE_LRU_HASH},
         },
         maps::{Map, MapData},
-        obj,
+        obj::{
+            self,
+            maps::{LegacyMap, MapKind},
+        },
         sys::{override_syscall, SysResult, Syscall},
     };
 
     use super::*;
 
     fn new_obj_map() -> obj::Map {
-        obj::Map::Legacy(obj::LegacyMap {
+        obj::Map::Legacy(LegacyMap {
             def: bpf_map_def {
                 map_type: BPF_MAP_TYPE_HASH as u32,
                 key_size: 4,
@@ -128,7 +137,7 @@ mod tests {
             },
             section_index: 0,
             data: Vec::new(),
-            kind: obj::MapKind::Other,
+            kind: MapKind::Other,
             symbol_index: 0,
         })
     }
@@ -249,7 +258,7 @@ mod tests {
     #[test]
     fn test_try_from_ok_lru() {
         let map_data = MapData {
-            obj: obj::Map::Legacy(obj::LegacyMap {
+            obj: obj::Map::Legacy(LegacyMap {
                 def: bpf_map_def {
                     map_type: BPF_MAP_TYPE_LRU_HASH as u32,
                     key_size: 4,
@@ -260,7 +269,7 @@ mod tests {
                 section_index: 0,
                 symbol_index: 0,
                 data: Vec::new(),
-                kind: obj::MapKind::Other,
+                kind: MapKind::Other,
             }),
             fd: Some(42),
             pinned: false,
@@ -309,6 +318,27 @@ mod tests {
         let mut hm = HashMap::<_, u32, u32>::new(&mut map).unwrap();
 
         assert!(hm.insert(1, 42, 0).is_ok());
+    }
+
+    #[test]
+    fn test_insert_boxed_ok() {
+        override_syscall(|call| match call {
+            Syscall::Bpf {
+                cmd: bpf_cmd::BPF_MAP_UPDATE_ELEM,
+                ..
+            } => Ok(1),
+            _ => sys_error(EFAULT),
+        });
+
+        let mut map = MapData {
+            obj: new_obj_map(),
+            fd: Some(42),
+            pinned: false,
+            btf_fd: None,
+        };
+        let mut hm = HashMap::<_, u32, u32>::new(&mut map).unwrap();
+
+        assert!(hm.insert(Box::new(1), Box::new(42), 0).is_ok());
     }
 
     #[test]

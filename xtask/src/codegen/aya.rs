@@ -11,7 +11,7 @@ pub fn codegen(opts: &Options) -> Result<(), anyhow::Error> {
 }
 
 fn codegen_internal_btf_bindings(opts: &Options) -> Result<(), anyhow::Error> {
-    let dir = PathBuf::from("aya");
+    let dir = PathBuf::from("aya-obj");
     let generated = dir.join("src/generated");
     let mut bindgen = bindgen::user_builder()
         .clang_arg(format!(
@@ -49,7 +49,7 @@ fn codegen_internal_btf_bindings(opts: &Options) -> Result<(), anyhow::Error> {
         .to_string();
 
     // write the bindings, with the original helpers removed
-    write_to_file(&generated.join("btf_internal_bindings.rs"), &bindings)?;
+    write_to_file(generated.join("btf_internal_bindings.rs"), &bindings)?;
 
     Ok(())
 }
@@ -154,7 +154,7 @@ fn codegen_bindings(opts: &Options) -> Result<(), anyhow::Error> {
         "BPF_RINGBUF_.*",
     ];
 
-    let dir = PathBuf::from("aya");
+    let dir = PathBuf::from("aya-obj");
     let generated = dir.join("src/generated");
 
     let builder = || {
@@ -219,7 +219,7 @@ fn codegen_bindings(opts: &Options) -> Result<(), anyhow::Error> {
 
         // write the bindings, with the original helpers removed
         write_to_file(
-            &generated.join(format!("linux_bindings_{}.rs", arch)),
+            generated.join(format!("linux_bindings_{arch}.rs")),
             &bindings.to_string(),
         )?;
     }

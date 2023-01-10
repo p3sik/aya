@@ -1,6 +1,6 @@
 //! User space probes.
 use libc::pid_t;
-use object::{Object, ObjectSymbol};
+use object::{Object, ObjectSection, ObjectSymbol};
 use std::{
     error::Error,
     ffi::CStr,
@@ -84,7 +84,7 @@ impl UProbe {
 
         let mut path = if let Some(pid) = pid {
             find_lib_in_proc_maps(pid, target_str).map_err(|io_error| UProbeError::FileError {
-                filename: format!("/proc/{}/maps", pid),
+                filename: format!("/proc/{pid}/maps"),
                 io_error,
             })?
         } else {
@@ -187,7 +187,7 @@ pub enum UProbeError {
 }
 
 fn proc_maps_libs(pid: pid_t) -> Result<Vec<(String, String)>, io::Error> {
-    let maps_file = format!("/proc/{}/maps", pid);
+    let maps_file = format!("/proc/{pid}/maps");
     let data = fs::read_to_string(maps_file)?;
 
     Ok(data
@@ -319,15 +319,41 @@ enum ResolveSymbolError {
 
     #[error("unknown symbol `{0}`")]
     Unknown(String),
+
+    #[error("symbol `{0}` does not appear in section")]
+    NotInSection(String),
+
+    #[error("symbol `{0}` in section `{1:?}` which has no offset")]
+    SectionFileRangeNone(String, Result<String, object::Error>),
 }
 
 fn resolve_symbol(path: &str, symbol: &str) -> Result<u64, ResolveSymbolError> {
     let data = fs::read(path)?;
     let obj = object::read::File::parse(&*data)?;
 
-    obj.dynamic_symbols()
+    let sym = obj
+        .dynamic_symbols()
         .chain(obj.symbols())
         .find(|sym| sym.name().map(|name| name == symbol).unwrap_or(false))
-        .map(|s| s.address())
-        .ok_or_else(|| ResolveSymbolError::Unknown(symbol.to_string()))
+        .ok_or_else(|| ResolveSymbolError::Unknown(symbol.to_string()))?;
+
+    let needs_addr_translation = matches!(
+        obj.kind(),
+        object::ObjectKind::Dynamic | object::ObjectKind::Executable
+    );
+    if !needs_addr_translation {
+        Ok(sym.address())
+    } else {
+        let index = sym
+            .section_index()
+            .ok_or_else(|| ResolveSymbolError::NotInSection(symbol.to_string()))?;
+        let section = obj.section_by_index(index)?;
+        let (offset, _size) = section.file_range().ok_or_else(|| {
+            ResolveSymbolError::SectionFileRangeNone(
+                symbol.to_string(),
+                section.name().map(str::to_owned),
+            )
+        })?;
+        Ok(sym.address() - section.address() + offset)
+    }
 }

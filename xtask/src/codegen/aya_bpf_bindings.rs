@@ -103,14 +103,14 @@ pub fn codegen(opts: &Options) -> Result<(), anyhow::Error> {
         let generated = dir.join("src").join(arch.to_string());
         // write the bindings, with the original helpers removed
         write_to_file_fmt(
-            &generated.join("bindings.rs"),
+            generated.join("bindings.rs"),
             &tree.to_token_stream().to_string(),
         )?;
 
         // write the new helpers as expanded by expand_helpers()
         write_to_file_fmt(
-            &generated.join("helpers.rs"),
-            &format!("use super::bindings::*; {}", helpers),
+            generated.join("helpers.rs"),
+            &format!("use super::bindings::*; {helpers}"),
         )?;
     }
 

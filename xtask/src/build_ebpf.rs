@@ -37,7 +37,7 @@ impl std::fmt::Display for Architecture {
 }
 
 #[derive(Debug, Parser)]
-pub struct Options {
+pub struct BuildEbpfOptions {
     /// Set the endianness of the BPF target
     #[clap(default_value = "bpfel-unknown-none", long)]
     pub target: Architecture,
@@ -49,12 +49,12 @@ pub struct Options {
     pub libbpf_dir: PathBuf,
 }
 
-pub fn build_ebpf(opts: Options) -> anyhow::Result<()> {
+pub fn build_ebpf(opts: BuildEbpfOptions) -> anyhow::Result<()> {
     build_rust_ebpf(&opts)?;
     build_c_ebpf(&opts)
 }
 
-fn build_rust_ebpf(opts: &Options) -> anyhow::Result<()> {
+fn build_rust_ebpf(opts: &BuildEbpfOptions) -> anyhow::Result<()> {
     let mut dir = PathBuf::from(WORKSPACE_ROOT.to_string());
     dir.push("test/integration-ebpf");
 
@@ -92,7 +92,7 @@ fn get_libbpf_headers<P: AsRef<Path>>(libbpf_dir: P, include_path: P) -> anyhow:
     Ok(())
 }
 
-fn build_c_ebpf(opts: &Options) -> anyhow::Result<()> {
+fn build_c_ebpf(opts: &BuildEbpfOptions) -> anyhow::Result<()> {
     let mut src = PathBuf::from(WORKSPACE_ROOT.to_string());
     src.push("test/integration-ebpf/src/bpf");
 
@@ -103,6 +103,12 @@ fn build_c_ebpf(opts: &Options) -> anyhow::Result<()> {
 
     let include_path = out_path.join("include");
     get_libbpf_headers(&opts.libbpf_dir, &include_path)?;
+    // Export libbpf location as an env variable since it's needed for building
+    // the relocation tests at test/integration-test/src/tests/relocations.rs
+    // We decided to make an exception and build its eBPF programs at run-time
+    // because of the many different permutations.
+    std::env::set_var("LIBBPF_INCLUDE", &include_path);
+
     let files = fs::read_dir(&src).unwrap();
     for file in files {
         let p = file.unwrap().path();
@@ -140,7 +146,7 @@ fn compile_with_clang<P: Clone + AsRef<Path>>(
         .arg("-target")
         .arg("bpf")
         .arg("-c")
-        .arg(format!("-D__TARGET_ARCH_{}", arch))
+        .arg(format!("-D__TARGET_ARCH_{arch}"))
         .arg(src.as_ref().as_os_str())
         .arg("-o")
         .arg(out.as_ref().as_os_str());

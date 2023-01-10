@@ -71,7 +71,7 @@ impl Parse for LogArgs {
 }
 
 fn string_to_expr(s: String) -> Result<Expr> {
-    parse_str(&format!("\"{}\"", s))
+    parse_str(&format!("\"{s}\""))
 }
 
 fn hint_to_expr(hint: DisplayHint) -> Result<Expr> {
@@ -81,6 +81,8 @@ fn hint_to_expr(hint: DisplayHint) -> Result<Expr> {
         DisplayHint::UpperHex => parse_str("::aya_log_ebpf::macro_support::DisplayHint::UpperHex"),
         DisplayHint::Ipv4 => parse_str("::aya_log_ebpf::macro_support::DisplayHint::Ipv4"),
         DisplayHint::Ipv6 => parse_str("::aya_log_ebpf::macro_support::DisplayHint::Ipv6"),
+        DisplayHint::LowerMac => parse_str("::aya_log_ebpf::macro_support::DisplayHint::LowerMac"),
+        DisplayHint::UpperMac => parse_str("::aya_log_ebpf::macro_support::DisplayHint::UpperMac"),
     }
 }
 
@@ -106,7 +108,7 @@ pub(crate) fn log(args: LogArgs, level: Option<TokenStream>) -> Result<TokenStre
     let fragments = parse(&format_string_val).map_err(|e| {
         Error::new(
             format_string.span(),
-            format!("could not parse the format string: {}", e),
+            format!("could not parse the format string: {e}"),
         )
     })?;
 
